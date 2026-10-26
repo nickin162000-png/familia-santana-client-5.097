@@ -188,7 +188,7 @@ public class Hud {
         lastX = x;
         lastZ = z;
         lastValid = true;
-        airborne = !mc.field_71439_g.field_70122_C;
+        airborne = !mc.field_71439_g.field_70122_E;
 
         if (combo > 0 && System.currentTimeMillis() - lastHitTime > 2500L) combo = 0;
         int hurt = mc.field_71439_g.field_70737_aN;
