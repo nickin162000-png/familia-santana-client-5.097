@@ -32,29 +32,52 @@ jobs:
       - name: Converter nomes internos para nomes MCP
         run: |
           python3 - <<'PYEOF'
-          import csv
-          import io
-          import os
-          import re
-          import sys
-          import zipfile
-
-          HOME = os.path.expanduser("~")
-          GRADLE = os.path.join(HOME, ".gradle")
-          SRC = os.path.join(os.getcwd(), "src", "main", "java")
-
-          mapping = {}
-
-
-          def add(text):
-              for row in csv.reader(io.StringIO(text)):
-                  if len(row) >= 2 and (row[0].startswith("func_") or row[0].startswith("field_")):
-                      mapping[row[0]] = row[1]
-
-
-          for dp, dn, fn in os.walk(GRADLE):
-              for f in fn:
-                  path = os.path.join(dp, f)
+          import csv, io, os, re, sys, zipfile
+          G = os.path.join(os.path.expanduser("~"), ".gradle")
+          M = {}
+          def add(t):
+              for r in csv.reader(io.StringIO(t)):
+                  if len(r) >= 2 and r[0].startswith(("func_", "field_")):
+                      M[r[0]] = r[1]
+          for d, _, fs in os.walk(G):
+              for f in fs:
+                  p = os.path.join(d, f)
                   if f.startswith("mcp_stable") and f.endswith(".zip"):
-                      with zipfile.ZipFile(path) as zf:
-                          for n in
+                      z = zipfile.ZipFile(p)
+                      for n in z.namelist():
+                          if n.endswith(("fields.csv", "methods.csv")):
+                              add(z.read(n).decode("utf-8", "replace"))
+          if not M:
+              print("ERRO: tabela mcp_stable nao encontrada")
+              sys.exit(1)
+          print("Nomes na tabela:", len(M))
+          pat = re.compile(r"\b(?:func|field)_\d+_[A-Za-z0-9_]+\b")
+          miss = set()
+          cnt = [0]
+          def sub(m):
+              n = m.group(0)
+              if n in M:
+                  cnt[0] += 1
+                  return M[n]
+              miss.add(n)
+              return n
+          for d, _, fs in os.walk("src/main/java"):
+              for f in fs:
+                  if f.endswith(".java"):
+                      p = os.path.join(d, f)
+                      t = open(p, encoding="utf-8").read()
+                      u = pat.sub(sub, t)
+                      if u != t:
+                          open(p, "w", encoding="utf-8").write(u)
+          print("Trocas:", cnt[0])
+          print("Sem nome:", sorted(miss))
+          PYEOF
+
+      - name: Compilar
+        run: ./gradlew build --no-daemon
+
+      - name: Guardar o .jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: FamiliaSantanaClient-jar
+          path: build/libs/*.jar
