@@ -1,0 +1,60 @@
+name: Build Familia Santana Client
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar o projeto
+        uses: actions/checkout@v4
+
+      - name: Instalar Java 8
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 8
+
+      - name: Baixar Forge MDK 1.8.9 (para pegar o gradlew)
+        run: |
+          curl -fL -o mdk.zip https://maven.minecraftforge.net/net/minecraftforge/forge/1.8.9-11.15.1.2318-1.8.9/forge-1.8.9-11.15.1.2318-1.8.9-mdk.zip
+          unzip -q mdk.zip -d mdk
+          MD=$(dirname "$(find mdk -name gradlew | head -n 1)")
+          cp -r "$MD/gradle" .
+          cp "$MD/gradlew" "$MD/gradlew.bat" .
+          chmod +x gradlew
+
+      - name: Preparar o Minecraft
+        run: ./gradlew setupCIWorkspace --no-daemon
+
+      - name: Converter nomes internos para nomes MCP
+        run: |
+          python3 - <<'PYEOF'
+          import csv
+          import io
+          import os
+          import re
+          import sys
+          import zipfile
+
+          HOME = os.path.expanduser("~")
+          GRADLE = os.path.join(HOME, ".gradle")
+          SRC = os.path.join(os.getcwd(), "src", "main", "java")
+
+          mapping = {}
+
+
+          def add(text):
+              for row in csv.reader(io.StringIO(text)):
+                  if len(row) >= 2 and (row[0].startswith("func_") or row[0].startswith("field_")):
+                      mapping[row[0]] = row[1]
+
+
+          for dp, dn, fn in os.walk(GRADLE):
+              for f in fn:
+                  path = os.path.join(dp, f)
+                  if f.startswith("mcp_stable") and f.endswith(".zip"):
+                      with zipfile.ZipFile(path) as zf:
+                          for n in
